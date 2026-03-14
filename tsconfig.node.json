@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "noEmit": false,
+    "outDir": "out/main"
+  },
+  "include": ["electron/main", "electron/preload", "src/shared"]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "pocket-claw",
+  "version": "1.0.0",
+  "description": "A desktop pet application built with Electron and Three.js",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "start": "electron-vite dev"
+  },
+  "keywords": ["electron", "desktop-pet", "threejs"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/three": "^0.169.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.3.0"
+  },
+  "build": {
+    "appId": "com.yourname.pocket-claw",
+    "productName": "Pocket Claw",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "assets/**/*",
+      "icons/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "hardenedRuntime": true
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  }
+}
