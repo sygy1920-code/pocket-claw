@@ -45,6 +45,40 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
+// 环境检测
+if (process.env['ELECTRON_RUN_AS_NODE']) {
+  console.error('❌ 错误: ELECTRON_RUN_AS_NODE 环境变量被设置');
+  console.error('');
+  console.error('这会导致 Electron 以 Node.js 模式运行，而不是 GUI 模式。');
+  console.error('');
+  console.error('解决方法:');
+  console.error('  1. 运行: npm run dev');
+  console.error('  2. 或: ./START.sh');
+  console.error('  3. 或: ELECTRON_RUN_AS_NODE= npm run dev');
+  console.error('');
+  console.error('不要直接运行: node out/main/index.js 或 electron out/main/index.js');
+  console.error('');
+  process.exit(1);
+}
+
+// 验证 Electron API 是否可用
+if (typeof app === 'undefined') {
+  console.error('❌ 错误: Electron API 不可用');
+  console.error('');
+  console.error('当前运行环境不正确。');
+  console.error('');
+  console.error('请确保:');
+  console.error('  1. 使用 npm run dev 启动（不是直接运行编译后的文件）');
+  console.error('  2. ELECTRON_RUN_AS_NODE 环境变量未被设置');
+  console.error('  3. 在正确的项目目录中运行');
+  console.error('');
+  console.error('调试信息:');
+  console.error('  process.versions.electron:', process.versions.electron || '未定义');
+  console.error('  process.env.ELECTRON_RUN_AS_NODE:', process.env.ELECTRON_RUN_AS_NODE || '未设置');
+  console.error('');
+  process.exit(1);
+}
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();

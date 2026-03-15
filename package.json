@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "description": "A desktop pet application built with Electron and Three.js",
   "main": "out/main/index.js",
+  "electron": {
+    "main": "electron/main/index.ts"
+  },
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "ELECTRON_RUN_AS_NODE= electron-vite dev",
     "dev:clean": "ELECTRON_RUN_AS_NODE= electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
