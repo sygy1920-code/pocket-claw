@@ -2,10 +2,20 @@ export class ChatInput {
   private el: HTMLElement | null = null;
   private textarea: HTMLTextAreaElement | null = null;
   private sendBtn: HTMLButtonElement | null = null;
-  private isVisible = false;
+  private visible = false;
   private resolve: ((value: string | null) => void) | null = null;
+  private getHeadPosition: () => { x: number; y: number };
 
-  constructor() {}
+  constructor(getHeadPosition: () => { x: number; y: number }) {
+    this.getHeadPosition = getHeadPosition;
+  }
+
+  /**
+   * Check if input is currently visible
+   */
+  isVisible(): boolean {
+    return this.visible;
+  }
 
   /**
    * Show input popup and wait for user input
@@ -14,7 +24,7 @@ export class ChatInput {
     return new Promise((resolve) => {
       this.resolve = resolve;
       this.ensureElement();
-      this.isVisible = true;
+      this.visible = true;
 
       if (this.textarea) {
         this.textarea.value = '';
@@ -37,9 +47,9 @@ export class ChatInput {
    * Hide input popup
    */
   hide(): void {
-    if (!this.isVisible) return;
+    if (!this.visible) return;
 
-    this.isVisible = false;
+    this.visible = false;
     this.el?.classList.remove('chat-input-visible');
     this.el?.classList.add('chat-input-hidden');
 
@@ -122,18 +132,18 @@ export class ChatInput {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
-    // Position near the pet
-    const modelX = w / 2;
-    const modelY = h - 10;
+    // Get the head position from the model
+    const headPos = this.getHeadPosition();
 
     const inputWidth = this.el.offsetWidth || 280;
+    const inputHeight = this.el.offsetHeight || 60;
 
-    let x = modelX - inputWidth / 2;
-    let y = modelY - 150; // Above the model
+    let x = headPos.x - inputWidth / 2;
+    let y = headPos.y - inputHeight - 10; // 10px above head
 
     // Keep within bounds
     x = Math.max(10, Math.min(x, w - inputWidth - 10));
-    y = Math.max(10, y);
+    y = Math.max(10, Math.min(y, h - inputHeight - 10));
 
     this.el.style.left = `${x}px`;
     this.el.style.top = `${y}px`;

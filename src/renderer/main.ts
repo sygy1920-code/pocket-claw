@@ -8,9 +8,9 @@ import { ChatManager } from './chat/chat-manager';
 window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById('app')!;
   const scene = new Live2DScene();
-  const mouseHandler = new Live2DMouseHandler(scene);
-  const contextMenu = new ContextMenu(scene);
   const chatManager = new ChatManager(scene);
+  const mouseHandler = new Live2DMouseHandler(scene, chatManager);
+  const contextMenu = new ContextMenu(scene);
 
   try {
     await scene.init(container);

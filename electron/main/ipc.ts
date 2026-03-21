@@ -1,16 +1,27 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC_EVENTS } from '../../src/shared/constants';
 import { CHAT_EVENTS } from '../../src/shared/chat-constants';
+import { MEMORY_EVENTS } from '../../src/shared/memory-constants';
 import { ConfigManager } from './config-manager';
 import { LLMService } from './llm-service';
+import { MemoryManager } from './memory-manager';
+import { PersonalityService } from './personality-service';
+import type { PersonalityTraits, InteractionRecord } from '../../src/shared/memory-constants';
 
-// Global instances for chat
+// Global instances
 let configManager: ConfigManager;
 let llmService: LLMService;
+let memoryManager: MemoryManager;
+let personalityService: PersonalityService;
 
 export function initChatServices(cm: ConfigManager, llm: LLMService) {
   configManager = cm;
   llmService = llm;
+}
+
+export function initMemoryServices(mm: MemoryManager, ps: PersonalityService) {
+  memoryManager = mm;
+  personalityService = ps;
 }
 
 export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
@@ -58,7 +69,7 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
   });
 
   // Send message
-  ipcMain.handle(CHAT_EVENTS.SEND_MESSAGE, async (event, message: string) => {
+  ipcMain.handle(CHAT_EVENTS.SEND_MESSAGE, async (event, message: string, personalityTraits?: PersonalityTraits) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || !llmService) {
       win?.webContents.send(CHAT_EVENTS.STREAM_CHUNK, {
@@ -69,7 +80,13 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
     }
 
     try {
-      const stream = llmService.streamResponse(message);
+      // Get personality modifier if traits provided
+      let personalityModifier = '';
+      if (personalityTraits && personalityService) {
+        personalityModifier = personalityService.getPersonalityPromptModifier(personalityTraits);
+      }
+
+      const stream = llmService.streamResponse(message, personalityModifier);
 
       for await (const chunk of stream) {
         win.webContents.send(CHAT_EVENTS.STREAM_CHUNK, chunk);
@@ -90,5 +107,87 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
     if (llmService) {
       llmService.clearHistory();
     }
+  });
+
+  // ===== Memory & Personality IPC Handlers =====
+
+  // Get memory data
+  ipcMain.handle(MEMORY_EVENTS.GET_MEMORY, () => {
+    if (!memoryManager) return null;
+    return memoryManager.getMemory();
+  });
+
+  // Get personality state
+  ipcMain.handle(MEMORY_EVENTS.GET_PERSONALITY, () => {
+    if (!memoryManager) return null;
+    return memoryManager.getPersonality();
+  });
+
+  // Update personality traits
+  ipcMain.on(MEMORY_EVENTS.UPDATE_PERSONALITY, (_event, traits: Partial<PersonalityTraits>) => {
+    if (!memoryManager) return;
+    memoryManager.updatePersonality(traits);
+  });
+
+  // Record interaction
+  ipcMain.on(MEMORY_EVENTS.RECORD_INTERACTION, (_event, interaction: InteractionRecord) => {
+    if (!memoryManager || !personalityService) return;
+
+    // Record the interaction
+    memoryManager.recordInteraction(interaction);
+
+    // Calculate and apply personality changes
+    const currentTraits = memoryManager.getPersonality().traits;
+    const changes = personalityService.calculatePersonalityChange(
+      currentTraits,
+      interaction.type,
+      interaction.data
+    );
+
+    if (Object.keys(changes).length > 0) {
+      memoryManager.updatePersonality(changes);
+
+      // Notify renderer of personality update
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.webContents.send('personality:updated', memoryManager.getPersonality());
+      }
+    }
+  });
+
+  // Get stats
+  ipcMain.handle(MEMORY_EVENTS.GET_STATS, () => {
+    if (!memoryManager) return null;
+    return memoryManager.getStats();
+  });
+
+  // Reset memory
+  ipcMain.on(MEMORY_EVENTS.RESET_MEMORY, () => {
+    if (!memoryManager) return;
+    memoryManager.resetMemory();
+
+    // Notify renderer
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.webContents.send('memory:reset');
+    }
+  });
+
+  // Generate daily summary
+  ipcMain.on(MEMORY_EVENTS.GENERATE_DAILY_SUMMARY, () => {
+    if (!memoryManager) return;
+    memoryManager.generateDailySummary();
+  });
+
+  // Get chat interval based on personality
+  ipcMain.handle(MEMORY_EVENTS.GET_CHAT_INTERVAL, (_event, traits: PersonalityTraits) => {
+    if (!personalityService) return 60000;
+    return personalityService.getChatInterval(traits);
+  });
+
+  // Get prompt modifier based on personality
+  ipcMain.handle(MEMORY_EVENTS.GET_PROMPT_MODIFIER, (_event, traits: PersonalityTraits) => {
+    if (!personalityService) return '';
+    return personalityService.getPersonalityPromptModifier(traits);
   });
 }

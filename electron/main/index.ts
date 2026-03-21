@@ -1,10 +1,12 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { setupPlatformSpecifics } from './platform';
-import { setupIpcHandlers, initChatServices } from './ipc';
+import { setupIpcHandlers, initChatServices, initMemoryServices } from './ipc';
 import { createTray } from './tray';
 import { ConfigManager } from './config-manager';
 import { LLMService } from './llm-service';
+import { MemoryManager } from './memory-manager';
+import { PersonalityService } from './personality-service';
 import { DEFAULT_CONFIG } from '../../src/shared/chat-constants';
 
 let mainWindow: BrowserWindow | null = null;
@@ -112,10 +114,18 @@ if (!gotTheLock) {
       config.temperature
     );
 
+    // Initialize memory and personality services
+    const memoryManager = new MemoryManager();
+    const personalityService = new PersonalityService();
+
+    // Set memory manager in LLM service for persistent history
+    llmService.setMemoryManager(memoryManager);
+
     mainWindow = createMainWindow();
     createTray(mainWindow);
     setupIpcHandlers(mainWindow);
     initChatServices(configManager, llmService);
+    initMemoryServices(memoryManager, personalityService);
   });
 
   app.on('window-all-closed', () => {

@@ -1,13 +1,18 @@
 import type { Live2DScene } from './live2d-scene';
+import type { ChatManager } from './chat/chat-manager';
+import { InteractionTracker } from './personality/interaction-tracker';
 
 /**
  * 鼠标处理（Live2D 版本）:
  * - 使用 bounds 检测是否悬停在宠物上
  * - 悬停时禁用穿透，移开时恢复穿透
  * - 支持单击、双击、拖拽
+ * - 追踪所有交互记录到记忆系统
  */
 export class Live2DMouseHandler {
   private scene: Live2DScene;
+  private chatManager: ChatManager | null = null;
+  private interactionTracker: InteractionTracker | null = null;
 
   private isHovering = false;
   private isDragging = false;
@@ -15,9 +20,16 @@ export class Live2DMouseHandler {
   private clickCount = 0;
   private lastClickAt = 0;
   private clickTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private wasHovering = false; // Track hover state changes
 
-  constructor(scene: Live2DScene) {
+  constructor(scene: Live2DScene, chatManager?: ChatManager) {
     this.scene = scene;
+    this.chatManager = chatManager || null;
+
+    // Get interaction tracker from chat manager if available
+    if (chatManager && 'getInteractionTracker' in chatManager) {
+      this.interactionTracker = (chatManager as any).getInteractionTracker();
+    }
   }
 
   init(): void {
@@ -43,6 +55,19 @@ export class Live2DMouseHandler {
       this.isHovering = nowHovering;
       window.electronAPI?.setIgnoreMouseEvents(!nowHovering);
       document.body.style.cursor = nowHovering ? 'pointer' : 'default';
+
+      // Track hover changes
+      if (nowHovering) {
+        this.interactionTracker?.startHover();
+      } else if (this.wasHovering) {
+        this.interactionTracker?.endHover();
+      }
+      this.wasHovering = nowHovering;
+    }
+
+    // Reset ignore tracking on any mouse movement over the pet
+    if (nowHovering) {
+      this.interactionTracker?.recordAnyInteraction();
     }
   };
 
@@ -50,9 +75,13 @@ export class Live2DMouseHandler {
     if (!this.isHovering || e.button !== 0) return;
     this.isDragging = true;
     this.dragStart = { screenX: e.screenX, screenY: e.screenY };
+    this.interactionTracker?.startDrag();
   };
 
   private onUp = (_e: MouseEvent): void => {
+    if (this.isDragging) {
+      this.interactionTracker?.endDrag();
+    }
     this.isDragging = false;
     this.dragStart = null;
   };
@@ -82,22 +111,25 @@ export class Live2DMouseHandler {
   private handleSingleClick(): void {
     window.electronAPI?.notifyPetClicked();
     this.scene.setState('happy');
+    // Note: Interaction tracking is handled in ChatManager.triggerClickChat()
+    this.chatManager?.triggerClickChat();
   }
 
   private handleDoubleClick(): void {
     this.scene.setState('excited');
+    // Note: Interaction tracking is handled in ChatManager.triggerDoubleClickChat()
+    this.chatManager?.triggerDoubleClickChat();
   }
 
   private onContextMenu = (e: MouseEvent): void => {
     if (!this.isHovering) return;
     e.preventDefault();
 
-    window.electronAPI?.showContextMenu(e.clientX, e.clientY);
+    // Track right-click interaction
+    this.interactionTracker?.recordRightClick();
 
-    // 触发自定义上下文菜单
-    window.dispatchEvent(new CustomEvent('show-context-menu', {
-      detail: { x: e.clientX, y: e.clientY }
-    }));
+    // Show input dialog on right click
+    this.chatManager?.showInput();
   };
 
   destroy(): void {
@@ -107,5 +139,6 @@ export class Live2DMouseHandler {
     window.removeEventListener('click', this.onClick);
     window.removeEventListener('contextmenu', this.onContextMenu);
     if (this.clickTimeoutId) clearTimeout(this.clickTimeoutId);
+    // Interaction tracker cleanup is handled by ChatManager
   }
 }

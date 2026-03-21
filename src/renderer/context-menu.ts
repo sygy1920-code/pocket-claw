@@ -26,21 +26,6 @@ const MOTION_LABELS: Record<string, string> = {
   'Breath': '呼吸',
 };
 
-// Expression name to display name mapping
-const EXPRESSION_LABELS: Record<string, string> = {
-  'angry': '😠 生气',
-  'cat pupil': '🐱 猫瞳',
-  'cry': '😢 哭哭',
-  'expl': '💥 爆炸',
-  'eye glow': '✨ 眼发光',
-  'fluffy': '🐾 毛茸茸',
-  'knife': '🔪 刀刀',
-  'long': '↕️ 变长',
-  'no pupil': '👁️ 无瞳',
-  'question': '❓ 疑问',
-  'sad': '😢 难过',
-};
-
 export class ContextMenu {
   private scene: Live2DScene;
   private el: HTMLElement | null = null;
@@ -114,20 +99,6 @@ export class ContextMenu {
   private buildMenuItems(): MenuItem[] {
     const items: MenuItem[] = [];
 
-    // Get expressions first
-    const expressions = this.scene.getExpressions();
-
-    if (expressions.length > 0) {
-      for (const expr of expressions) {
-        const displayName = this.getExpressionDisplayName(expr);
-        items.push({
-          label: displayName,
-          action: () => this.scene.setExpression(expr)
-        });
-      }
-      items.push({ separator: true });
-    }
-
     // Get motion groups from the scene
     const motionGroups = this.scene.getMotionGroups();
     const motionNames = Object.keys(motionGroups);
@@ -147,19 +118,6 @@ export class ContextMenu {
     items.push({ label: '关闭菜单', action: () => this.hide() });
 
     return items;
-  }
-
-  /**
-   * Get display name for an expression
-   */
-  private getExpressionDisplayName(exprName: string): string {
-    for (const [key, label] of Object.entries(EXPRESSION_LABELS)) {
-      if (exprName.toLowerCase().includes(key.toLowerCase()) ||
-          key.toLowerCase().includes(exprName.toLowerCase())) {
-        return label;
-      }
-    }
-    return exprName;
   }
 
   /**

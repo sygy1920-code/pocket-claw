@@ -7,9 +7,11 @@ export class ChatBubble {
   private typewriterTimer: number | null = null;
   private currentText = '';
   private getHeadPosition: () => { x: number; y: number };
+  private isInputVisible: () => boolean;
 
-  constructor(getHeadPosition: () => { x: number; y: number }) {
+  constructor(getHeadPosition: () => { x: number; y: number }, isInputVisible: () => boolean) {
     this.getHeadPosition = getHeadPosition;
+    this.isInputVisible = isInputVisible;
   }
 
   /**
@@ -109,6 +111,37 @@ export class ChatBubble {
     }
   }
 
+  /**
+   * Update bubble position (call when input visibility changes)
+   */
+  updatePosition(): void {
+    if (!this.el) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    // Get the head position from the model
+    const headPos = this.getHeadPosition();
+
+    // Position bubble above the head
+    const bubbleWidth = this.el.offsetWidth || 200;
+    const bubbleHeight = this.el.offsetHeight || 50;
+
+    // Check if input is visible, if so move bubble higher
+    const inputOffset = this.isInputVisible() ? 80 : 20;
+
+    // Center bubble above head, with some padding
+    let x = headPos.x - bubbleWidth / 2;
+    let y = headPos.y - bubbleHeight - inputOffset; // 20px or 80px above head
+
+    // Ensure bubble is fully visible within window
+    x = Math.max(10, Math.min(x, w - bubbleWidth - 10));
+    y = Math.max(10, Math.min(y, h - bubbleHeight - 10));
+
+    this.el.style.left = `${x}px`;
+    this.el.style.top = `${y}px`;
+  }
+
   private ensureElement(): void {
     if (this.el) return;
 
@@ -143,31 +176,6 @@ export class ChatBubble {
       clearTimeout(this.autoHideTimer);
       this.autoHideTimer = null;
     }
-  }
-
-  private updatePosition(): void {
-    if (!this.el) return;
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-
-    // Get the head position from the model
-    const headPos = this.getHeadPosition();
-
-    // Position bubble above the head
-    const bubbleWidth = this.el.offsetWidth || 200;
-    const bubbleHeight = this.el.offsetHeight || 50;
-
-    // Center bubble above head, with some padding
-    let x = headPos.x - bubbleWidth / 2;
-    let y = headPos.y - bubbleHeight - 20; // 20px above head
-
-    // Ensure bubble is fully visible within window
-    x = Math.max(10, Math.min(x, w - bubbleWidth - 10));
-    y = Math.max(10, Math.min(y, h - bubbleHeight - 10));
-
-    this.el.style.left = `${x}px`;
-    this.el.style.top = `${y}px`;
   }
 
   destroy(): void {

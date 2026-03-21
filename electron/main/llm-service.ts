@@ -1,4 +1,6 @@
 import type { ChatMessage, StreamChunk } from '../../src/shared/chat-constants';
+import type { PersonalityTraits } from '../../src/shared/memory-constants';
+import type { MemoryManager } from './memory-manager';
 
 /**
  * Generate JWT token for GLM API
@@ -55,6 +57,7 @@ function generateJWT(apiKey: string): string {
 
 export class LLMService {
   private conversationHistory: ChatMessage[] = [];
+  private memoryManager: MemoryManager | null = null;
 
   constructor(
     private apiKey: string,
@@ -66,19 +69,52 @@ export class LLMService {
   ) {}
 
   /**
+   * Set the memory manager for persistent conversation history
+   */
+  setMemoryManager(manager: MemoryManager): void {
+    this.memoryManager = manager;
+    // Load recent context from memory
+    this.loadRecentContext();
+  }
+
+  /**
+   * Load recent conversation context from memory manager
+   */
+  private loadRecentContext(): void {
+    if (!this.memoryManager) return;
+
+    const recentMessages = this.memoryManager.getRecentContext(20);
+    if (recentMessages.length > 0) {
+      this.conversationHistory = recentMessages;
+      console.log(`Loaded ${recentMessages.length} messages from memory`);
+    }
+  }
+
+  /**
    * Send a message and stream the response
    */
-  async *streamResponse(userMessage: string): AsyncGenerator<StreamChunk> {
+  async *streamResponse(userMessage: string, personalityModifier?: string): AsyncGenerator<StreamChunk> {
     // Add user message to history
-    this.conversationHistory.push({
+    const userMsg: ChatMessage = {
       role: 'user',
       content: userMessage,
       timestamp: Date.now(),
-    });
+    };
+    this.conversationHistory.push(userMsg);
+
+    // Save to memory manager
+    if (this.memoryManager) {
+      this.memoryManager.addChatMessage(userMsg);
+    }
+
+    // Build system prompt with personality modifier
+    const systemPrompt = personalityModifier
+      ? `${this.systemPrompt}\n\n${personalityModifier}`
+      : this.systemPrompt;
 
     // Build messages array
     const messages = [
-      { role: 'system', content: this.systemPrompt },
+      { role: 'system', content: systemPrompt },
       ...this.conversationHistory.map((m) => ({
         role: m.role,
         content: m.content,
@@ -159,16 +195,22 @@ export class LLMService {
 
       // Add assistant response to history
       if (fullResponse) {
-        this.conversationHistory.push({
+        const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: fullResponse,
           timestamp: Date.now(),
-        });
+        };
+        this.conversationHistory.push(assistantMsg);
+
+        // Save to memory manager
+        if (this.memoryManager) {
+          this.memoryManager.addChatMessage(assistantMsg);
+        }
       }
 
-      // Keep history manageable (last 10 messages)
-      if (this.conversationHistory.length > 10) {
-        this.conversationHistory = this.conversationHistory.slice(-10);
+      // Keep history manageable (last 20 messages)
+      if (this.conversationHistory.length > 20) {
+        this.conversationHistory = this.conversationHistory.slice(-20);
       }
 
       yield { type: 'done' };
@@ -184,6 +226,18 @@ export class LLMService {
         yield { type: 'error', error: '未知错误' };
       }
     }
+  }
+
+  /**
+   * Send a message with personality context
+   */
+  async *streamResponseWithContext(
+    userMessage: string,
+    personality: PersonalityTraits
+  ): AsyncGenerator<StreamChunk> {
+    // This method is called from IPC handler with personality context
+    // The actual streamResponse method will handle it
+    yield* this.streamResponse(userMessage);
   }
 
   /**

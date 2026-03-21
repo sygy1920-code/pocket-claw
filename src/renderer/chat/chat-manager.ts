@@ -1,7 +1,8 @@
 import type { Live2DScene } from '../live2d-scene';
 import type { StreamChunk } from '../../shared/chat-constants';
-import { ChatBubble } from './chat-bubble';
-import { TypingIndicator } from './typing-indicator';
+import { ChatPanel } from './chat-panel';
+import { PersonalityEngine } from '../personality/personality-engine';
+import { InteractionTracker } from '../personality/interaction-tracker';
 
 // Expression to prompt mapping
 const EXPRESSION_PROMPTS: Record<string, string> = {
@@ -18,22 +19,56 @@ const EXPRESSION_PROMPTS: Record<string, string> = {
   'sad': '说一句难过的话，要简短可爱',
 };
 
-const DEFAULT_EXPRESSIONS = ['angry', 'cat pupil', 'cry', 'expl', 'eye glow', 'fluffy', 'knife', 'long', 'no pupil', 'question', 'sad'];
-
 export class ChatManager {
-  private bubble: ChatBubble;
-  private typing: TypingIndicator;
+  private panel: ChatPanel;
   private isProcessing = false;
   private unsubscribeStream: (() => void) | null = null;
+  private unsubscribePersonality: (() => void) | null = null;
   private autoChatTimer: number | null = null;
-  private chatInterval = 60 * 1000; // 1 minute
+  private checkInterval = 10 * 1000; // Check every 10 seconds
+  private autoChatDelay = 2 * 60 * 1000; // 2 minutes of inactivity before auto-chat (will be adjusted by personality)
+  private lastChatTime = 0;
+  private lastUserInteractionTime = Date.now();
+  private chatCooldown = 10 * 1000; // 10 seconds for both auto and click chat
+
+  // Personality components
+  private personalityEngine: PersonalityEngine;
+  private interactionTracker: InteractionTracker;
 
   constructor(private scene: Live2DScene) {
-    this.bubble = new ChatBubble(() => this.scene.getHeadPosition());
-    this.typing = new TypingIndicator(() => this.scene.getHeadPosition());
+    this.panel = new ChatPanel(() => this.scene.getHeadPosition());
+
+    // Initialize personality engine with default values (will be updated from main process)
+    this.personalityEngine = new PersonalityEngine({
+      traits: {
+        affection: 50,
+        playfulness: 60,
+        energy: 70,
+        mood: 20,
+        curiosity: 65,
+        trust: 40,
+      },
+      lastUpdate: Date.now(),
+      totalInteractions: 0,
+      firstInteraction: Date.now(),
+      daysKnown: 0,
+    });
+
+    // Initialize interaction tracker
+    this.interactionTracker = new InteractionTracker((record) => {
+      window.electronAPI.memory.recordInteraction(record);
+    });
+  }
+
+  // Expose interaction tracker for mouse handler
+  getInteractionTracker(): InteractionTracker {
+    return this.interactionTracker;
   }
 
   async init(): Promise<void> {
+    // Initialize last user interaction time
+    this.lastUserInteractionTime = Date.now();
+
     // Check if configured
     const configured = await window.electronAPI.chat.isConfigured();
 
@@ -48,38 +83,97 @@ export class ChatManager {
       this.onStreamChunk
     );
 
-    // Start auto-chat regardless of config (will fail gracefully)
+    // Load personality from main process
+    try {
+      const personalityState = await window.electronAPI.memory.getPersonality();
+      if (personalityState) {
+        this.personalityEngine.updateState(personalityState);
+        console.log('✅ Personality loaded:', this.personalityEngine.getPersonalityDescription());
+      }
+    } catch (error) {
+      console.error('Failed to load personality:', error);
+    }
+
+    // Listen for personality updates
+    this.unsubscribePersonality = window.electronAPI.memory.onPersonalityUpdate((state) => {
+      this.personalityEngine.updateState(state);
+      console.log('✅ Personality updated:', this.personalityEngine.getPersonalityDescription());
+    });
+
+    // Update chat interval based on personality
+    this.updateChatInterval();
+
+    // Trigger initial chat after 3 seconds
+    setTimeout(() => this.triggerAutoChat(), 3000);
+
+    // Start periodic check for auto-chat
     this.startAutoChat();
   }
 
-  private startAutoChat(): void {
-    // Initial message after a short delay
-    setTimeout(() => this.triggerAutoChat(), 3000);
+  private updateChatInterval(): void {
+    const traits = this.personalityEngine.getTraits();
+    window.electronAPI.memory.getChatInterval(traits).then((interval) => {
+      this.checkInterval = interval;
+      // Restart auto-chat timer with new interval
+      if (this.autoChatTimer) {
+        clearInterval(this.autoChatTimer);
+      }
+      this.startAutoChat();
+    });
+  }
 
-    // Then every minute
+  private startAutoChat(): void {
+    // Check periodically if we should trigger auto-chat
     this.autoChatTimer = window.setInterval(() => {
+      this.checkAndTriggerAutoChat();
+    }, this.checkInterval);
+  }
+
+  private checkAndTriggerAutoChat(): void {
+    const now = Date.now();
+    const timeSinceLastInteraction = now - this.lastUserInteractionTime;
+
+    // Only trigger if no interaction for 2 minutes
+    if (timeSinceLastInteraction >= this.autoChatDelay) {
       this.triggerAutoChat();
-    }, this.chatInterval);
+    }
   }
 
   private async triggerAutoChat(): Promise<void> {
+    // Check if pet should initiate chat based on personality
+    if (!this.personalityEngine.shouldInitiateChat()) {
+      return;
+    }
+
     if (this.isProcessing) {
       console.log('⏸️ Auto-chat skipped: already processing');
       return;
     }
 
-    // First, pick and set a random expression
+    const now = Date.now();
+    const cooldown = this.personalityEngine.getCooldownDuration(this.chatCooldown);
+    if (now - this.lastChatTime < cooldown) {
+      console.log('⏸️ Auto-chat skipped: cooldown');
+      return;
+    }
+
+    // First, pick and set an expression based on personality
     const expressions = this.scene.getExpressions();
     console.log('🎭 Available expressions:', expressions);
     if (expressions.length === 0) return;
 
-    const randomExpr = expressions[Math.floor(Math.random() * expressions.length)];
-    this.scene.setExpression(randomExpr);
+    const selectedExpr = this.personalityEngine.selectExpression(expressions);
+    this.scene.setExpression(selectedExpr);
 
     // Then generate dialogue based on the expression
-    const prompt = this.getPromptForExpression(randomExpr);
-    console.log('🔄 Auto-chat trigger:', { expression: randomExpr, prompt });
-    await this.sendMessage(prompt, randomExpr);
+    const prompt = this.getPromptForExpression(selectedExpr);
+    console.log('🔄 Auto-chat trigger:', { expression: selectedExpr, prompt });
+    this.lastChatTime = now;
+
+    // Record auto-chat interaction
+    this.interactionTracker.recordAutoChat();
+
+    await this.sendMessage(prompt, selectedExpr);
   }
 
   /**
@@ -107,16 +201,22 @@ export class ChatManager {
     this.isProcessing = true;
     console.log('📤 Sending message:', { message, expression });
 
+    // Clear previous message
+    this.panel.clearBubble();
+
     // Show typing indicator
-    this.typing.show();
+    this.panel.showTyping();
 
     try {
-      await window.electronAPI.chat.sendMessage(message);
+      // Get current personality traits
+      const traits = this.personalityEngine.getTraits();
+      // Send message with personality context
+      await window.electronAPI.chat.sendMessage(message, traits);
       console.log('✅ Message sent successfully');
     } catch (error) {
       console.error('❌ Send message error:', error);
-      this.typing.hide();
-      this.bubble.show('出错了，请稍后再试喵~');
+      this.panel.hideTyping();
+      this.panel.showBubble('出错了，请稍后再试喵~');
       this.isProcessing = false;
     }
   }
@@ -124,17 +224,19 @@ export class ChatManager {
   private onStreamChunk = (chunk: StreamChunk): void => {
     if (chunk.type === 'text') {
       // First text chunk - hide typing and show bubble
-      if (this.typing) {
-        this.typing.hide();
-      }
+      this.panel.hideTyping();
+
+      // Log the API response
+      console.log('📥 API Response chunk:', chunk.text);
 
       // Append text to bubble
-      this.bubble.appendText(chunk.text || '');
+      this.panel.appendBubbleText(chunk.text || '');
     } else if (chunk.type === 'done') {
       this.isProcessing = false;
+      console.log('✅ API Response complete');
 
       // Auto hide after delay
-      this.bubble.autoHide(10);
+      this.panel.bubbleAutoHide(10);
 
       // Return to idle after 10s
       setTimeout(() => {
@@ -142,9 +244,10 @@ export class ChatManager {
       }, 10000);
     } else if (chunk.type === 'error') {
       this.isProcessing = false;
-      this.typing.hide();
-      this.bubble.show(chunk.error || '出错了喵~');
-      this.bubble.autoHide(5);
+      console.error('❌ API Response error:', chunk.error);
+      this.panel.hideTyping();
+      this.panel.showBubble(chunk.error || '出错了喵~');
+      this.panel.bubbleAutoHide(5);
     }
   }
 
@@ -174,12 +277,134 @@ export class ChatManager {
     }, 5000);
   }
 
+  /**
+   * Trigger chat on click (single click)
+   * Picks an expression based on personality and generates dialogue
+   */
+  async triggerClickChat(): Promise<void> {
+    if (this.isProcessing) {
+      console.log('⏸️ Click chat skipped: already processing');
+      return;
+    }
+
+    const now = Date.now();
+    const cooldown = this.personalityEngine.getCooldownDuration(this.chatCooldown);
+    if (now - this.lastChatTime < cooldown) {
+      console.log('⏸️ Click chat skipped: cooldown');
+      return;
+    }
+
+    const expressions = this.scene.getExpressions();
+    if (expressions.length === 0) return;
+
+    const selectedExpr = this.personalityEngine.selectExpression(expressions);
+    this.scene.setExpression(selectedExpr);
+
+    const prompt = this.getPromptForExpression(selectedExpr);
+    console.log('🖱️ Click chat trigger:', { expression: selectedExpr, prompt });
+    this.lastChatTime = now;
+    this.lastUserInteractionTime = now;
+
+    // Record click interaction
+    this.interactionTracker.recordClick(selectedExpr);
+
+    await this.sendMessage(prompt, selectedExpr);
+  }
+
+  /**
+   * Trigger chat on double click
+   * Uses excited expression
+   */
+  async triggerDoubleClickChat(): Promise<void> {
+    if (this.isProcessing) {
+      console.log('⏸️ Double click chat skipped: already processing');
+      return;
+    }
+
+    const now = Date.now();
+    const cooldown = this.personalityEngine.getCooldownDuration(this.chatCooldown);
+    if (now - this.lastChatTime < cooldown) {
+      console.log('⏸️ Double click chat skipped: cooldown');
+      return;
+    }
+
+    // Use 'knife' expression for excited state
+    const expr = 'knife';
+    this.scene.setExpression(expr);
+
+    const prompt = this.getPromptForExpression(expr);
+    console.log('🖱️🖱️ Double click chat trigger:', { expression: expr, prompt });
+    this.lastChatTime = now;
+    this.lastUserInteractionTime = now;
+
+    // Record double-click interaction
+    this.interactionTracker.recordDoubleClick(expr);
+
+    await this.sendMessage(prompt, expr);
+  }
+
+  /**
+   * Show input dialog for user to type a message
+   */
+  async showInput(): Promise<void> {
+    // Update user interaction time when opening input
+    this.lastUserInteractionTime = Date.now();
+
+    if (this.isProcessing) {
+      console.log('⏸️ Input skipped: already processing');
+      return;
+    }
+
+    const userMessage = await this.panel.showInput();
+    if (!userMessage) {
+      console.log('❌ Input cancelled');
+      return;
+    }
+
+    console.log('💬 User input:', userMessage);
+
+    // Record chat message interaction
+    this.interactionTracker.recordChatMessage(userMessage);
+
+    await this.sendUserMessage(userMessage);
+  }
+
+  /**
+   * Send user message directly (bypassing cooldown)
+   */
+  private async sendUserMessage(message: string): Promise<void> {
+    // Update user interaction time when sending message
+    this.lastUserInteractionTime = Date.now();
+
+    this.isProcessing = true;
+    console.log('📤 Sending user message:', message);
+
+    // Clear previous message
+    this.panel.clearBubble();
+
+    // Show typing indicator
+    this.panel.showTyping();
+
+    try {
+      // Get current personality traits
+      const traits = this.personalityEngine.getTraits();
+      await window.electronAPI.chat.sendMessage(message, traits);
+      console.log('✅ Message sent successfully');
+    } catch (error) {
+      console.error('❌ Send message error:', error);
+      this.panel.hideTyping();
+      this.panel.showBubble('出错了，请稍后再试喵~');
+      this.isProcessing = false;
+    }
+  }
+
   destroy(): void {
     this.unsubscribeStream?.();
+    this.unsubscribePersonality?.();
     if (this.autoChatTimer) {
       clearInterval(this.autoChatTimer);
     }
-    this.bubble.destroy();
-    this.typing.destroy();
+    this.interactionTracker.destroy();
+    this.panel.destroy();
   }
 }
