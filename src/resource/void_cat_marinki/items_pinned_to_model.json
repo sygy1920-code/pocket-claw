@@ -1,0 +1,119 @@
+{
+    "FileMetadata": {
+        "LastSavedVTubeStudioVersion": "1.29.0",
+        "LastSavedPlatform": "Steam",
+        "LastSavedDateUTC": "Monday, 30 September 2024, 13:57:20",
+        "LastSavedDateLocalTime": "Monday, 30 September 2024, 15:57:20",
+        "LastSavedDateUnixMillisecondTimestamp": "1727704640044"
+    },
+    "SceneName": "",
+    "SceneGroupName": "",
+    "SceneModel": "",
+    "SceneID": "",
+    "Items": [
+        {
+            "ItemName": "void_cat_marinki",
+            "ItemObjectInScene": {
+                "m_FileID": -201116,
+                "m_PathID": 0
+            },
+            "ItemFileName": "void_cat_marinki",
+            "ItemInstanceUUID": "e2feee843e994be7bc33f26a02f43fa4",
+            "Selected": true,
+            "TrackingModel": true,
+            "IsAnimated": false,
+            "IsVideo": false,
+            "IsModel": true,
+            "IsWeb": false,
+            "IsCensored": false,
+            "IsFlipped": false,
+            "IsLocked": false,
+            "Smoothing": 0.0,
+            "Order": 1,
+            "FPS": -1.0,
+            "IsPinned": true,
+            "PinnedTo": "body_D",
+            "PinnedModel_Live2D": "void_cat",
+            "PinnedModel_VTS": "void_cat",
+            "PinnedModel_InternalID": "4f94f92f3989441b851e15710f351156",
+            "PinnedVertexIDs": "40 41 39 38 35 37",
+            "PinnedVertexPositions": [
+                {
+                    "x": -0.19676750898361207,
+                    "y": -0.12550610303878785,
+                    "z": 0.0
+                },
+                {
+                    "x": -0.17752456665039063,
+                    "y": -0.09790073335170746,
+                    "z": 0.0
+                },
+                {
+                    "x": -0.20232881605625153,
+                    "y": -0.15039430558681489,
+                    "z": 0.0
+                },
+                {
+                    "x": -0.20234228670597077,
+                    "y": -0.16409844160079957,
+                    "z": 0.0
+                },
+                {
+                    "x": -0.21705123782157899,
+                    "y": -0.18975584208965302,
+                    "z": 0.0
+                },
+                {
+                    "x": -0.20234227180480958,
+                    "y": -0.1777544766664505,
+                    "z": 0.0
+                }
+            ],
+            "PinnedVertexCenterOffset": {
+                "x": -0.11473643779754639,
+                "y": 0.09546729922294617,
+                "z": -0.011494253762066365
+            },
+            "Size": 0.10344827175140381,
+            "ModelScaleMultiplier": 0.01149425283074379,
+            "Rotation": 0.0,
+            "Position": {
+                "x": -0.31446200609207156,
+                "y": -0.054655104875564578,
+                "z": 0.0
+            },
+            "Group": "",
+            "Scene": "",
+            "AssetType": 6,
+            "FromWorkshop": false,
+            "FromHotkey": false,
+            "FromAPI": false,
+            "FadeTime": 0.5,
+            "Plugin": "",
+            "WebItemURL": "",
+            "WebItemUseCustomCSS": false,
+            "WebItemCustomCSS": "body {\n    background-color: rgba(0, 0, 0, 0);\n    margin: 0px auto;\n    overflow: hidden;\n}",
+            "WebItemZoomPercent": 100,
+            "WebItemAlphaMultiplier": 1.0,
+            "WebItemCropLeftRightTopBottom": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 0.0
+            },
+            "WebItemSizeInUnityUnits": {
+                "x": 0.6000000238418579,
+                "y": 0.30000001192092898
+            },
+            "WebItemSizeInPixels": {
+                "x": 1024,
+                "y": 576
+            },
+            "WebItemMuted": false,
+            "WebItemAllowLocalURLs": false,
+            "WebItemAllowTransparentBackground": true,
+            "WebItemInteractable": true,
+            "WebItemScrollSensitivity": 0.4000000059604645
+        }
+    ]
+}

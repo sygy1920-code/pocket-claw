@@ -1,7 +1,7 @@
 {
   "name": "pocket-claw",
   "version": "1.0.0",
-  "description": "A desktop pet application built with Electron and Three.js",
+  "description": "A desktop pet application built with Electron and Live2D",
   "main": "out/main/index.js",
   "electron": {
     "main": "electron/main/index.ts"
@@ -15,10 +15,16 @@
     "dist": "electron-builder",
     "start": "electron-vite dev"
   },
-  "keywords": ["electron", "desktop-pet", "threejs"],
+  "keywords": [
+    "electron",
+    "desktop-pet",
+    "live2d"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^6.5.10",
     "three": "^0.169.0"
   },
   "devDependencies": {
@@ -38,6 +44,7 @@
     "files": [
       "out/**/*",
       "assets/**/*",
+      "src/resource/**/*",
       "icons/**/*"
     ],
     "mac": {
@@ -45,10 +52,14 @@
       "hardenedRuntime": true
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { PetScene } from './scene';
+import type { Live2DScene } from './live2d-scene';
 
 interface MenuItem {
   label?: string;
@@ -7,11 +7,11 @@ interface MenuItem {
 }
 
 export class ContextMenu {
-  private petScene: PetScene;
+  private scene: Live2DScene;
   private el: HTMLElement | null = null;
 
-  constructor(petScene: PetScene) {
-    this.petScene = petScene;
+  constructor(scene: Live2DScene) {
+    this.scene = scene;
   }
 
   init(): void {
@@ -32,9 +32,9 @@ export class ContextMenu {
     this.el.className = 'context-menu';
 
     const items: MenuItem[] = [
-      { label: '开心跳跳 ✨', action: () => this.petScene.getPet().setState('happy') },
-      { label: '超级兴奋 🎉', action: () => this.petScene.getPet().setState('excited') },
-      { label: '回到安静 💤', action: () => this.petScene.getPet().setState('idle') },
+      { label: '开心跳跳 ✨', action: () => this.scene.setState('happy') },
+      { label: '超级兴奋 🎉', action: () => this.scene.setState('excited') },
+      { label: '回到安静 💤', action: () => this.scene.setState('idle') },
       { separator: true },
       { label: '关闭菜单', action: () => this.hide() }
     ];
