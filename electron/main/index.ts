@@ -1,8 +1,11 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { setupPlatformSpecifics } from './platform';
-import { setupIpcHandlers } from './ipc';
+import { setupIpcHandlers, initChatServices } from './ipc';
 import { createTray } from './tray';
+import { ConfigManager } from './config-manager';
+import { LLMService } from './llm-service';
+import { DEFAULT_CONFIG } from '../../src/shared/chat-constants';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -26,12 +29,18 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false,
-      sandbox: false
+      sandbox: false,
+      devTools: true // Enable DevTools
     }
   });
 
   setupPlatformSpecifics(win);
   win.setAlwaysOnTop(true, 'floating');
+
+  // Open DevTools in development mode
+  if (process.env.NODE_ENV === 'development' || process.env.ELECTRON_RENDERER_URL) {
+    win.webContents.openDevTools({ mode: 'detach' });
+  }
 
   // 初始鼠标穿透
   win.setIgnoreMouseEvents(true, { forward: true });
@@ -91,9 +100,22 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    // Initialize chat services
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
+    const llmService = new LLMService(
+      configManager.getApiKey(),
+      config.baseURL,
+      config.model,
+      config.systemPrompt,
+      config.maxTokens,
+      config.temperature
+    );
+
     mainWindow = createMainWindow();
     createTray(mainWindow);
     setupIpcHandlers(mainWindow);
+    initChatServices(configManager, llmService);
   });
 
   app.on('window-all-closed', () => {

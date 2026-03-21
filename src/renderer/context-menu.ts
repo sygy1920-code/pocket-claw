@@ -6,6 +6,26 @@ interface MenuItem {
   separator?: true;
 }
 
+// Motion name to display name mapping
+const MOTION_LABELS: Record<string, string> = {
+  'Idle': '待机',
+  'Tap': '点击',
+  'DoubleTap': '双击',
+  'Happy': '开心',
+  'Excited': '兴奋',
+  'Shake': '摇头',
+  'Jump': '跳跃',
+  'Walk': '走路',
+  'Run': '跑步',
+  'Sit': '坐下',
+  'Sleep': '睡觉',
+  'Angry': '生气',
+  'Sad': '难过',
+  'Surprised': '惊讶',
+  'Blink': '眨眼',
+  'Breath': '呼吸',
+};
+
 export class ContextMenu {
   private scene: Live2DScene;
   private el: HTMLElement | null = null;
@@ -31,13 +51,7 @@ export class ContextMenu {
     this.el = document.createElement('div');
     this.el.className = 'context-menu';
 
-    const items: MenuItem[] = [
-      { label: '开心跳跳 ✨', action: () => this.scene.setState('happy') },
-      { label: '超级兴奋 🎉', action: () => this.scene.setState('excited') },
-      { label: '回到安静 💤', action: () => this.scene.setState('idle') },
-      { separator: true },
-      { label: '关闭菜单', action: () => this.hide() }
-    ];
+    const items = this.buildMenuItems();
 
     for (const item of items) {
       if (item.separator) {
@@ -77,6 +91,49 @@ export class ContextMenu {
   private hide(): void {
     this.el?.remove();
     this.el = null;
+  }
+
+  /**
+   * Build menu items dynamically based on available motions
+   */
+  private buildMenuItems(): MenuItem[] {
+    const items: MenuItem[] = [];
+
+    // Get motion groups from the scene
+    const motionGroups = this.scene.getMotionGroups();
+    const motionNames = Object.keys(motionGroups);
+
+    // Only show motions if available
+    if (motionNames.length > 0) {
+      for (const motionName of motionNames) {
+        const displayName = this.getMotionDisplayName(motionName);
+        items.push({
+          label: displayName,
+          action: () => this.scene.playMotion(motionName)
+        });
+      }
+      items.push({ separator: true });
+    }
+
+    items.push({ label: '关闭菜单', action: () => this.hide() });
+
+    return items;
+  }
+
+  /**
+   * Get display name for a motion
+   */
+  private getMotionDisplayName(motionName: string): string {
+    // Try to find a mapping
+    for (const [key, label] of Object.entries(MOTION_LABELS)) {
+      if (motionName.toLowerCase().includes(key.toLowerCase()) ||
+          key.toLowerCase().includes(motionName.toLowerCase())) {
+        return label;
+      }
+    }
+
+    // Fallback to original name with emoji
+    return motionName;
   }
 
   destroy(): void {

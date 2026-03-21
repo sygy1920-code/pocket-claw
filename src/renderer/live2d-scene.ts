@@ -138,6 +138,11 @@ export class Live2DScene {
 
       this.loaded = true;
       console.log('Live2D model loaded successfully');
+
+      // Log model bounds for debugging
+      const bounds = this.model.getBounds();
+      console.log('Model bounds:', bounds);
+      console.log('Model position:', { x: this.model.x, y: this.model.y, scale: this.model.scale.x });
     } catch (error) {
       console.error('Failed to load Live2D model:');
       console.error('Error:', error);
@@ -184,16 +189,16 @@ export class Live2DScene {
         break;
       case 'happy':
         // Try to find a happy/excited motion
-        this.playMotion(['Tap', 'Happy', 'Excited']);
+        this.playMotionFromList(['Tap', 'Happy', 'Excited']);
         break;
       case 'excited':
         // Try to find an excited motion
-        this.playMotion(['DoubleTap', 'Excited', 'Shake', 'Jump']);
+        this.playMotionFromList(['DoubleTap', 'Excited', 'Shake', 'Jump']);
         break;
     }
   }
 
-  private playMotion(groupNames: string[]): void {
+  private playMotionFromList(groupNames: string[]): void {
     if (!this.model) return;
 
     const availableGroups = Object.keys(this.motionGroups);
@@ -239,6 +244,81 @@ export class Live2DScene {
     const bounds = this.model.getBounds();
     return bounds && x >= bounds.x && x <= bounds.x + bounds.width &&
            y >= bounds.y && y <= bounds.y + bounds.height;
+  }
+
+  /**
+   * Get model bounds on screen
+   */
+  getModelBounds(): { x: number; y: number; width: number; height: number } | null {
+    if (!this.model) return null;
+    const bounds = this.model.getBounds();
+    if (!bounds) return null;
+    return {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height
+    };
+  }
+
+  /**
+   * Get the position for placing elements above the model's head
+   * Returns the x, y coordinates for centering above the head
+   */
+  getHeadPosition(): { x: number; y: number } {
+    if (!this.model) {
+      return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    }
+
+    const bounds = this.model.getBounds();
+    if (!bounds) {
+      return { x: this.model.x, y: this.model.y - 100 };
+    }
+
+    // Head is approximately at the top 1/4 of the model
+    const headY = bounds.y + bounds.height * 0.15;
+    const centerX = bounds.x + bounds.width / 2;
+
+    return { x: centerX, y: headY };
+  }
+
+  /**
+   * Get available motion groups
+   */
+  getMotionGroups(): Record<string, any[]> {
+    return this.motionGroups;
+  }
+
+  /**
+   * Get motion group names
+   */
+  getMotionGroupNames(): string[] {
+    return Object.keys(this.motionGroups);
+  }
+
+  /**
+   * Play a motion by group name and index
+   */
+  playMotion(groupName: string, index: number = 0): void {
+    if (!this.model) return;
+
+    const availableGroups = Object.keys(this.motionGroups);
+
+    // Find exact match
+    if (availableGroups.includes(groupName)) {
+      this.model.motion(groupName);
+      return;
+    }
+
+    // Try partial match
+    const matching = availableGroups.find(g =>
+      g.toLowerCase().includes(groupName.toLowerCase()) ||
+      groupName.toLowerCase().includes(g.toLowerCase())
+    );
+
+    if (matching) {
+      this.model.motion(matching);
+    }
   }
 
   /**

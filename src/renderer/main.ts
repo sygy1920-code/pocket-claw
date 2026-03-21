@@ -1,19 +1,23 @@
 import './styles.css';
+import './chat/chat-styles.css';
 import { Live2DScene } from './live2d-scene';
 import { Live2DMouseHandler } from './live2d-mouse-handler';
 import { ContextMenu } from './context-menu';
+import { ChatManager } from './chat/chat-manager';
 
 window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById('app')!;
   const scene = new Live2DScene();
   const mouseHandler = new Live2DMouseHandler(scene);
   const contextMenu = new ContextMenu(scene);
+  const chatManager = new ChatManager(scene);
 
   try {
     await scene.init(container);
     scene.startLoop();
     mouseHandler.init();
     contextMenu.init();
+    await chatManager.init();
   } catch (error) {
     console.error('Failed to initialize Live2D scene:', error);
     container.innerHTML = `
