@@ -6,7 +6,53 @@
 			"void_cat.2048/texture_00.png"
 		],
 		"Physics": "void_cat.physics3.json",
-		"DisplayInfo": "void_cat.cdi3.json"
+		"DisplayInfo": "void_cat.cdi3.json",
+		"Expressions": [
+			{
+				"Name": "angry",
+				"File": "expressions/angry.exp3.json"
+			},
+			{
+				"Name": "cat pupil",
+				"File": "expressions/cat pupil.exp3.json"
+			},
+			{
+				"Name": "cry",
+				"File": "expressions/cry.exp3.json"
+			},
+			{
+				"Name": "expl",
+				"File": "expressions/expl.exp3.json"
+			},
+			{
+				"Name": "eye glow",
+				"File": "expressions/eye glow.exp3.json"
+			},
+			{
+				"Name": "fluffy",
+				"File": "expressions/fluffy.exp3.json"
+			},
+			{
+				"Name": "knife",
+				"File": "expressions/knife.exp3.json"
+			},
+			{
+				"Name": "long",
+				"File": "expressions/long.exp3.json"
+			},
+			{
+				"Name": "no pupil",
+				"File": "expressions/no pupil.exp3.json"
+			},
+			{
+				"Name": "question",
+				"File": "expressions/question.exp3.json"
+			},
+			{
+				"Name": "sad",
+				"File": "expressions/sad.exp3.json"
+			}
+		]
 	},
 	"Groups": [
 		{

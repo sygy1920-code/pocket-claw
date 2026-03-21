@@ -19,6 +19,7 @@ export class Live2DScene {
   private stateTimer = 0;
   private loaded = false;
   private motionGroups: Record<string, any[]> = {};
+  private expressions: string[] = [];
 
   constructor() {}
 
@@ -97,6 +98,10 @@ export class Live2DScene {
       const internalModel = this.model.internalModel;
       this.motionGroups = (internalModel?.motionManager?.motionGroups as Record<string, any[]>) || {};
 
+      // Get expressions from the model
+      this.expressions = internalModel.motionManager.expressionManager?.definitions?.map((d: any) => d.Name) || [];
+      console.log('Expression names:', this.expressions);
+
       console.log('Motion groups:', Object.keys(this.motionGroups));
       console.log('Model loaded:', this.model);
 
@@ -113,20 +118,6 @@ export class Live2DScene {
       this.app.stage.interactive = true;
       this.app.stage.hitArea = this.app.screen;
 
-      // Mouse focus tracking - model looks at mouse position
-      this.app.stage.on('pointermove', (e) => {
-        if (this.model) {
-          const pos = e.data.global;
-          this.model.focus(pos.x, pos.y);
-        }
-      });
-
-      // Hit area events
-      this.model.on('hit', (hitAreas: string[]) => {
-        console.log('Hit areas:', hitAreas);
-        this.triggerMotionForHitArea(hitAreas);
-      });
-
       // Motion event listeners
       this.model.on('motionStart', (group: string, index: number) => {
         console.log(`Motion started: ${group}[${index}]`);
@@ -138,6 +129,8 @@ export class Live2DScene {
 
       this.loaded = true;
       console.log('Live2D model loaded successfully');
+
+      console.log('Model details:', this.model);
 
       // Log model bounds for debugging
       const bounds = this.model.getBounds();
@@ -154,29 +147,6 @@ export class Live2DScene {
     }
   }
 
-  private triggerMotionForHitArea(hitAreas: string[]): void {
-    if (!this.model || hitAreas.length === 0) return;
-
-    const hitArea = hitAreas[0];
-    const motionGroupNames = Object.keys(this.motionGroups);
-
-    // Look for matching motion group
-    const matchingMotion = motionGroupNames.find((name) =>
-      name.toLowerCase().includes(hitArea.toLowerCase()) ||
-      hitArea.toLowerCase().includes(name.toLowerCase())
-    );
-
-    if (matchingMotion) {
-      console.log(`Triggering motion for hit area "${hitArea}": ${matchingMotion}`);
-      this.model!.motion(matchingMotion);
-    } else {
-      // If no match, play a random motion
-      const randomGroup = motionGroupNames[Math.floor(Math.random() * motionGroupNames.length)];
-      console.log(`No matching motion for "${hitArea}", playing random: ${randomGroup}`);
-      this.model!.motion(randomGroup);
-    }
-  }
-
   setState(state: PetState): void {
     this.state = state;
     this.stateTimer = 0;
@@ -186,50 +156,15 @@ export class Live2DScene {
     switch (state) {
       case 'idle':
         // Let idle motion play automatically
+        this.model.internalModel.motionManager.expressionManager?.resetExpression();
         break;
       case 'happy':
-        // Try to find a happy/excited motion
-        this.playMotionFromList(['Tap', 'Happy', 'Excited']);
+        this.model.expression('cat pupil');
         break;
       case 'excited':
         // Try to find an excited motion
-        this.playMotionFromList(['DoubleTap', 'Excited', 'Shake', 'Jump']);
+        this.model.expression('knife');
         break;
-    }
-  }
-
-  private playMotionFromList(groupNames: string[]): void {
-    if (!this.model) return;
-
-    const availableGroups = Object.keys(this.motionGroups);
-
-    for (const name of groupNames) {
-      const matching = availableGroups.find(g =>
-        g.toLowerCase().includes(name.toLowerCase())
-      );
-      if (matching) {
-        this.model.motion(matching);
-        return;
-      }
-    }
-
-    // If no match, play random motion
-    if (availableGroups.length > 0) {
-      const randomGroup = availableGroups[Math.floor(Math.random() * availableGroups.length)];
-      this.model.motion(randomGroup);
-    }
-  }
-
-  update(dt: number): void {
-    if (!this.loaded) return;
-
-    this.stateTimer += dt;
-
-    // Auto return to idle after animations
-    if (this.state === 'happy' && this.stateTimer > 2) {
-      this.setState('idle');
-    } else if (this.state === 'excited' && this.stateTimer > 2.5) {
-      this.setState('idle');
     }
   }
 
@@ -276,7 +211,7 @@ export class Live2DScene {
     }
 
     // Head is approximately at the top 1/4 of the model
-    const headY = bounds.y + bounds.height * 0.15;
+    const headY = bounds.y;
     const centerX = bounds.x + bounds.width / 2;
 
     return { x: centerX, y: headY };
@@ -294,6 +229,22 @@ export class Live2DScene {
    */
   getMotionGroupNames(): string[] {
     return Object.keys(this.motionGroups);
+  }
+
+  /**
+   * Get all available expressions
+   */
+  getExpressions(): string[] {
+    return this.expressions;
+  }
+
+  /**
+   * Set an expression by name
+   */
+  setExpression(expressionName: string): void {
+    if (!this.model) return;
+
+    this.model.expression(expressionName);
   }
 
   /**
@@ -319,17 +270,6 @@ export class Live2DScene {
     if (matching) {
       this.model.motion(matching);
     }
-  }
-
-  /**
-   * Start the animation loop
-   */
-  startLoop(): void {
-    const loop = () => {
-      this.update(0.016); // ~60fps
-      requestAnimationFrame(loop);
-    };
-    loop();
   }
 
   private onResize = (): void => {

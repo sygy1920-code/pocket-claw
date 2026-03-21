@@ -17,12 +17,25 @@
 .chat-bubble::after {
   content: '';
   position: absolute;
-  bottom: -8px;
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
-  border-width: 8px 8px 0;
+  border-width: 10px 10px 0;
   border-style: solid;
-  border-color: #ffffff transparent transparent;
+  border-color: #f8f0ff transparent transparent;
+}
+
+.chat-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 10px 0;
+  border-style: solid;
+  border-color: #e8e0ff transparent transparent;
+  z-index: -1;
+  filter: blur(1px);
 }
 
 .chat-bubble-visible {

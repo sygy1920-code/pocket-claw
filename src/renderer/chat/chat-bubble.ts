@@ -44,8 +44,6 @@ export class ChatBubble {
     this.el!.classList.add('chat-bubble-visible');
     this.updatePosition();
 
-    console.log('💬 Bubble shown at:', this.el.style.left, this.el.style.top);
-
     if (autoHide > 0) {
       this.autoHideTimer = window.setTimeout(() => {
         this.hide();
@@ -170,8 +168,6 @@ export class ChatBubble {
 
     this.el.style.left = `${x}px`;
     this.el.style.top = `${y}px`;
-
-    console.log('💬 Bubble position:', { x, y, headPos, bubbleWidth, bubbleHeight });
   }
 
   destroy(): void {

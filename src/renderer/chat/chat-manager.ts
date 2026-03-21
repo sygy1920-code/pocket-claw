@@ -3,18 +3,22 @@ import type { StreamChunk } from '../../shared/chat-constants';
 import { ChatBubble } from './chat-bubble';
 import { TypingIndicator } from './typing-indicator';
 
-// Random prompts for auto-chat
-const AUTO_CHAT_PROMPTS = [
-  '说一句简短的问候',
-  '说一句调皮的话',
-  '说说你现在在做什么',
-  '说一句可爱的话',
-  '说一句想睡觉的话',
-  '说一句想吃东西的话',
-  '说一句关于天气的话',
-  '说一句无聊的话',
-  '说一句开心的话',
-];
+// Expression to prompt mapping
+const EXPRESSION_PROMPTS: Record<string, string> = {
+  'angry': '说一句生气的话，要简短可爱',
+  'cat pupil': '说一句像猫咪的话，要简短可爱',
+  'cry': '说一句想哭的话，要简短可爱',
+  'expl': '说一句惊讶的话，要简短可爱',
+  'eye glow': '说一句神秘的话，要简短可爱',
+  'fluffy': '说一句毛茸茸的感觉，要简短可爱',
+  'knife': '说一句调皮威胁的话，要简短可爱',
+  'long': '说一句拉伸的感觉，要简短可爱',
+  'no pupil': '说一句空洞的话，要简短可爱',
+  'question': '说一句疑问的话，要简短可爱',
+  'sad': '说一句难过的话，要简短可爱',
+};
+
+const DEFAULT_EXPRESSIONS = ['angry', 'cat pupil', 'cry', 'expl', 'eye glow', 'fluffy', 'knife', 'long', 'no pupil', 'question', 'sad'];
 
 export class ChatManager {
   private bubble: ChatBubble;
@@ -64,21 +68,47 @@ export class ChatManager {
       return;
     }
 
-    // Pick a random prompt
-    const prompt = AUTO_CHAT_PROMPTS[Math.floor(Math.random() * AUTO_CHAT_PROMPTS.length)];
-    console.log('🔄 Auto-chat trigger:', prompt);
-    await this.sendMessage(prompt);
+    // First, pick and set a random expression
+    const expressions = this.scene.getExpressions();
+    console.log('🎭 Available expressions:', expressions);
+    if (expressions.length === 0) return;
+
+    const randomExpr = expressions[Math.floor(Math.random() * expressions.length)];
+    this.scene.setExpression(randomExpr);
+
+    // Then generate dialogue based on the expression
+    const prompt = this.getPromptForExpression(randomExpr);
+    console.log('🔄 Auto-chat trigger:', { expression: randomExpr, prompt });
+    await this.sendMessage(prompt, randomExpr);
   }
 
-  private async sendMessage(message: string): Promise<void> {
+  /**
+   * Get prompt based on expression
+   */
+  private getPromptForExpression(exprName: string): string {
+    // Try to find exact match
+    if (EXPRESSION_PROMPTS[exprName]) {
+      return EXPRESSION_PROMPTS[exprName];
+    }
+
+    // Try partial match
+    for (const [key, prompt] of Object.entries(EXPRESSION_PROMPTS)) {
+      if (exprName.toLowerCase().includes(key.toLowerCase()) ||
+          key.toLowerCase().includes(exprName.toLowerCase())) {
+        return prompt;
+      }
+    }
+
+    // Default fallback
+    return '说一句简短可爱的话';
+  }
+
+  private async sendMessage(message: string, expression?: string): Promise<void> {
     this.isProcessing = true;
-    console.log('📤 Sending message:', message);
+    console.log('📤 Sending message:', { message, expression });
 
     // Show typing indicator
     this.typing.show();
-
-    // Make pet excited
-    this.scene.setState('happy');
 
     try {
       await window.electronAPI.chat.sendMessage(message);
@@ -106,10 +136,10 @@ export class ChatManager {
       // Auto hide after delay
       this.bubble.autoHide(10);
 
-      // Return to idle after a while
+      // Return to idle after 10s
       setTimeout(() => {
         this.scene.setState('idle');
-      }, 2000);
+      }, 10000);
     } else if (chunk.type === 'error') {
       this.isProcessing = false;
       this.typing.hide();
