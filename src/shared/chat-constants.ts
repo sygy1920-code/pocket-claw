@@ -6,6 +6,7 @@ export const CHAT_EVENTS = {
   // Config
   GET_CONFIG: 'chat:get-config',
   IS_CONFIGURED: 'chat:is-configured',
+  SET_API_KEY: 'chat:set-api-key',
 
   // Messaging
   SEND_MESSAGE: 'chat:send-message',
@@ -28,13 +29,14 @@ export const DEFAULT_CONFIG = {
 偶尔在句尾加"喵~"。你生活在用户的桌面上，喜欢和主人聊天。`
 } as const;
 
-export type StreamChunkType = 'text' | 'done' | 'error';
+export type StreamChunkType = 'text' | 'done' | 'error' | 'expression';
 
-export interface StreamChunk {
-  type: StreamChunkType;
-  text?: string;
-  error?: string;
-}
+// 使用判别联合类型以支持正确的类型收窄
+export type StreamChunk =
+  | { type: 'text'; text: string; expression?: never; error?: never }
+  | { type: 'done'; text?: never; expression?: never; error?: never }
+  | { type: 'error'; error: string; text?: never; expression?: never }
+  | { type: 'expression'; expression: string; text?: never; error?: never };
 
 export interface ChatMessage {
   role: 'user' | 'assistant';

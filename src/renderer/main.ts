@@ -14,6 +14,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await scene.init(container);
+    scene.startIdleBehaviors();
     mouseHandler.init();
     contextMenu.init();
     await chatManager.init();

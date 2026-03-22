@@ -22,6 +22,11 @@ export function initChatServices(cm: ConfigManager, llm: LLMService) {
 export function initMemoryServices(mm: MemoryManager, ps: PersonalityService) {
   memoryManager = mm;
   personalityService = ps;
+
+  // Inject personality service into LLM service
+  if (llmService) {
+    llmService.setPersonalityService(ps);
+  }
 }
 
 export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
@@ -68,8 +73,17 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
     return configManager.isConfigured();
   });
 
+  // Set API Key
+  ipcMain.on(CHAT_EVENTS.SET_API_KEY, (_event, apiKey: string) => {
+    if (!configManager || !llmService) return;
+    configManager.setApiKey(apiKey);
+    // Update LLM service with new API key
+    llmService.updateConfig({ apiKey });
+    console.log('✅ API Key updated in LLMService');
+  });
+
   // Send message
-  ipcMain.handle(CHAT_EVENTS.SEND_MESSAGE, async (event, message: string, personalityTraits?: PersonalityTraits) => {
+  ipcMain.handle(CHAT_EVENTS.SEND_MESSAGE, async (event, message: string, personalityTraits?: PersonalityTraits, timeContext?: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || !llmService) {
       win?.webContents.send(CHAT_EVENTS.STREAM_CHUNK, {
@@ -80,13 +94,7 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
     }
 
     try {
-      // Get personality modifier if traits provided
-      let personalityModifier = '';
-      if (personalityTraits && personalityService) {
-        personalityModifier = personalityService.getPersonalityPromptModifier(personalityTraits);
-      }
-
-      const stream = llmService.streamResponse(message, personalityModifier);
+      const stream = llmService.streamResponse(message, personalityTraits, timeContext);
 
       for await (const chunk of stream) {
         win.webContents.send(CHAT_EVENTS.STREAM_CHUNK, chunk);
@@ -189,5 +197,17 @@ export function setupIpcHandlers(_mainWindow: BrowserWindow): void {
   ipcMain.handle(MEMORY_EVENTS.GET_PROMPT_MODIFIER, (_event, traits: PersonalityTraits) => {
     if (!personalityService) return '';
     return personalityService.getPersonalityPromptModifier(traits);
+  });
+
+  // Get pet info (name and owner title)
+  ipcMain.handle(MEMORY_EVENTS.GET_PET_INFO, () => {
+    if (!memoryManager) return { petName: '小爪', ownerTitle: '主人' };
+    return memoryManager.getPetInfo();
+  });
+
+  // Set pet info (name and owner title)
+  ipcMain.on(MEMORY_EVENTS.SET_PET_INFO, (_event, petName: string, ownerTitle: string) => {
+    if (!memoryManager) return;
+    memoryManager.setPetInfo(petName, ownerTitle);
   });
 }

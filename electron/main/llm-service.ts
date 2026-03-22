@@ -1,6 +1,7 @@
 import type { ChatMessage, StreamChunk } from '../../src/shared/chat-constants';
 import type { PersonalityTraits } from '../../src/shared/memory-constants';
 import type { MemoryManager } from './memory-manager';
+import { SUPPORTED_EXPRESSIONS } from '../../src/shared/expression-constants';
 
 /**
  * Generate JWT token for GLM API
@@ -65,7 +66,8 @@ export class LLMService {
     private model: string,
     private systemPrompt: string,
     private maxTokens: number,
-    private temperature: number
+    private temperature: number,
+    private personalityService: any = null  // PersonalityService injected from main
   ) {}
 
   /**
@@ -75,6 +77,92 @@ export class LLMService {
     this.memoryManager = manager;
     // Load recent context from memory
     this.loadRecentContext();
+  }
+
+  /**
+   * Set the personality service for prompt generation
+   */
+  setPersonalityService(service: any): void {
+    this.personalityService = service;
+  }
+
+  /**
+   * Parse expression from response text
+   * Format: [expression:expr_name]
+   */
+  private parseExpressionFromResponse(text: string): { expression: string | null; text: string } {
+    const match = text.match(/\[expression:(.+?)\]/);
+    if (match) {
+      const expr = match[1].trim();
+      if (SUPPORTED_EXPRESSIONS.includes(expr as any)) {
+        return { expression: expr, text: text.replace(match[0], '').trim() };
+      }
+    }
+    return { expression: null, text };
+  }
+
+  /**
+   * Build system prompt with personality, time context, and memory
+   */
+  private buildSystemPrompt(personalityTraits?: PersonalityTraits, timeContext?: string): string {
+    const parts: string[] = [];
+
+    // Get pet info from memory
+    let petName = '小爪';
+    let ownerTitle = '主人';
+    if (this.memoryManager) {
+      const petInfo = this.memoryManager.getPetInfo();
+      petName = petInfo.petName;
+      ownerTitle = petInfo.ownerTitle;
+    }
+
+    // Build base prompt with pet info
+    const basePrompt = this.systemPrompt
+      .replace(/小爪/g, petName)
+      .replace(/主人/g, ownerTitle);
+    parts.push(basePrompt);
+
+    // Add personality modifier
+    if (personalityTraits && this.personalityService) {
+      const personalityDesc = this.personalityService.getPersonalityPromptModifier(personalityTraits);
+      if (personalityDesc) {
+        parts.push(personalityDesc);
+      }
+    }
+
+    // Add time context
+    if (timeContext) {
+      parts.push(timeContext);
+    }
+
+    // Add memory context (summaries and stats)
+    if (this.memoryManager) {
+      const summaries = this.memoryManager.getConversationSummaries();
+      if (summaries.length > 0) {
+        const recentSummaries = summaries.slice(-3).map(s =>
+          `${s.date}: ${s.mood}, 聊了${s.topics.join('、')}`
+        ).join('; ');
+        parts.push(`最近聊天: ${recentSummaries}`);
+      }
+
+      const stats = this.memoryManager.getStats();
+      if (stats.daysKnown > 0) {
+        parts.push(`你认识主人${stats.daysKnown}天了。`);
+      }
+    }
+
+    // Add expression instructions with examples
+    parts.push(`\n【表情指令】`);
+    parts.push(`每次回复时，根据内容和心情，在回复最开头使用 [expression:表情名] 来指定表情。`);
+    parts.push(`可用表情: ${SUPPORTED_EXPRESSIONS.join(', ')}`);
+    parts.push(`\n示例:`);
+    parts.push(`- [expression:cat pupil] ${ownerTitle}好呀喵~`);
+    parts.push(`- [expression:question] 什么意思喵？`);
+    parts.push(`- [expression:knife] 再不理我，我要生气了喵！`);
+    parts.push(`- [expression:sad] 好像没人陪我玩...`);
+    parts.push(`\n请确保每次回复都以表情指令开头。`);
+
+    return parts.join('\n');
   }
 
   /**
@@ -93,7 +181,11 @@ export class LLMService {
   /**
    * Send a message and stream the response
    */
-  async *streamResponse(userMessage: string, personalityModifier?: string): AsyncGenerator<StreamChunk> {
+  async *streamResponse(
+    userMessage: string,
+    personalityTraits?: PersonalityTraits,
+    timeContext?: string
+  ): AsyncGenerator<StreamChunk> {
     // Add user message to history
     const userMsg: ChatMessage = {
       role: 'user',
@@ -107,10 +199,8 @@ export class LLMService {
       this.memoryManager.addChatMessage(userMsg);
     }
 
-    // Build system prompt with personality modifier
-    const systemPrompt = personalityModifier
-      ? `${this.systemPrompt}\n\n${personalityModifier}`
-      : this.systemPrompt;
+    // Build system prompt with personality and time context
+    const systemPrompt = this.buildSystemPrompt(personalityTraits, timeContext);
 
     // Build messages array
     const messages = [
@@ -154,7 +244,7 @@ export class LLMService {
         return;
       }
 
-      // Stream response
+      // Stream response with 1s buffer delay to ensure expression tags are complete
       const reader = response.body?.getReader();
       if (!reader) {
         yield { type: 'error', error: '无法读取响应' };
@@ -163,41 +253,91 @@ export class LLMService {
 
       const decoder = new TextDecoder();
       let fullResponse = '';
+      const bufferDelay = 1000; // 1 second buffer
+      let bufferTimer: NodeJS.Timeout | null = null;
+      let streamComplete = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Read stream in background
+      const readStream = async (): Promise<void> => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            streamComplete = true;
+            break;
+          }
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              yield { type: 'done' };
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                fullResponse += content;
-                yield { type: 'text', text: content };
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') {
+                streamComplete = true;
+                break;
               }
-            } catch (e) {
-              // Skip invalid JSON
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  fullResponse += content;
+                }
+              } catch (e) {
+                // Skip invalid JSON
+              }
             }
           }
+
+          // If we have content and stream is complete, break early
+          if (streamComplete) break;
         }
+      };
+
+      // Start reading stream
+      const readPromise = readStream();
+
+      // Wait for buffer delay or stream completion
+      await new Promise<void>((resolve) => {
+        const checkAndResolve = () => {
+          if (streamComplete || fullResponse.length > 0) {
+            // If stream is complete or we have some content, wait buffer delay
+            bufferTimer = setTimeout(() => {
+              resolve();
+            }, bufferDelay);
+          } else {
+            // No content yet, check again soon
+            setTimeout(checkAndResolve, 50);
+          }
+        };
+        checkAndResolve();
+      });
+
+      // Wait for stream to fully complete
+      await readPromise;
+
+      // Clear buffer timer
+      if (bufferTimer) {
+        clearTimeout(bufferTimer);
       }
 
-      // Add assistant response to history
+      // Now process the complete response
       if (fullResponse) {
+        // Parse expression and send first
+        const { expression, text: cleanText } = this.parseExpressionFromResponse(fullResponse);
+        if (expression) {
+          yield { type: 'expression', expression };
+        }
+
+        // Send clean text (without expression tags)
+        if (cleanText) {
+          yield { type: 'text', text: cleanText };
+        }
+
+        // Add to history
         const assistantMsg: ChatMessage = {
           role: 'assistant',
-          content: fullResponse,
+          content: cleanText,
           timestamp: Date.now(),
         };
         this.conversationHistory.push(assistantMsg);
@@ -226,18 +366,6 @@ export class LLMService {
         yield { type: 'error', error: '未知错误' };
       }
     }
-  }
-
-  /**
-   * Send a message with personality context
-   */
-  async *streamResponseWithContext(
-    userMessage: string,
-    personality: PersonalityTraits
-  ): AsyncGenerator<StreamChunk> {
-    // This method is called from IPC handler with personality context
-    // The actual streamResponse method will handle it
-    yield* this.streamResponse(userMessage);
   }
 
   /**

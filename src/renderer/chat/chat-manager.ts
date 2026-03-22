@@ -3,6 +3,7 @@ import type { StreamChunk } from '../../shared/chat-constants';
 import { ChatPanel } from './chat-panel';
 import { PersonalityEngine } from '../personality/personality-engine';
 import { InteractionTracker } from '../personality/interaction-tracker';
+import { getTimeContext, getTimeOfDay, getGreetingForTimeOfDay } from '../personality/time-awareness';
 
 // Expression to prompt mapping
 const EXPRESSION_PROMPTS: Record<string, string> = {
@@ -100,11 +101,14 @@ export class ChatManager {
       console.log('✅ Personality updated:', this.personalityEngine.getPersonalityDescription());
     });
 
+    // Check and set up pet info if needed
+    await this.checkAndSetupPetInfo();
+
     // Update chat interval based on personality
     this.updateChatInterval();
 
-    // Trigger initial chat after 3 seconds
-    setTimeout(() => this.triggerAutoChat(), 3000);
+    // Trigger greeting after 2 seconds
+    setTimeout(() => this.triggerGreeting(), 2000);
 
     // Start periodic check for auto-chat
     this.startAutoChat();
@@ -116,17 +120,29 @@ export class ChatManager {
       this.checkInterval = interval;
       // Restart auto-chat timer with new interval
       if (this.autoChatTimer) {
-        clearInterval(this.autoChatTimer);
+        clearTimeout(this.autoChatTimer);
       }
       this.startAutoChat();
     });
   }
 
   private startAutoChat(): void {
-    // Check periodically if we should trigger auto-chat
-    this.autoChatTimer = window.setInterval(() => {
+    // Use recursive timeout for naturalized intervals
+    this.scheduleNextChat();
+  }
+
+  private scheduleNextChat(): void {
+    const delay = this.getNaturalizedInterval();
+    this.autoChatTimer = window.setTimeout(() => {
       this.checkAndTriggerAutoChat();
-    }, this.checkInterval);
+      this.scheduleNextChat();
+    }, delay);
+  }
+
+  private getNaturalizedInterval(): number {
+    const base = this.checkInterval;
+    const jitter = base * 0.5; // 50% random variation
+    return base + (Math.random() - 0.5) * jitter;
   }
 
   private checkAndTriggerAutoChat(): void {
@@ -177,6 +193,31 @@ export class ChatManager {
   }
 
   /**
+   * Trigger greeting on startup via LLM
+   */
+  private async triggerGreeting(): Promise<void> {
+    if (this.isProcessing) {
+      console.log('⏸️ Greeting skipped: already processing');
+      return;
+    }
+
+    const greeting = getGreetingForTimeOfDay();
+    const timeContext = getTimeContext();
+
+    // Generate greeting prompt for LLM
+    const prompt = `${greeting} ${timeContext.replace(/。/g, '')}。请用一句简短可爱的话跟主人打招呼。`;
+
+    console.log('👋 Startup greeting prompt:', prompt);
+
+    // Send to LLM for generation (expression will be decided by LLM)
+    await this.sendMessage(prompt);
+
+    // Update last chat time to avoid immediate auto-chat
+    this.lastChatTime = Date.now();
+    this.lastUserInteractionTime = Date.now();
+  }
+
+  /**
    * Get prompt based on expression
    */
   private getPromptForExpression(exprName: string): string {
@@ -208,10 +249,11 @@ export class ChatManager {
     this.panel.showTyping();
 
     try {
-      // Get current personality traits
+      // Get current personality traits and time context
       const traits = this.personalityEngine.getTraits();
-      // Send message with personality context
-      await window.electronAPI.chat.sendMessage(message, traits);
+      const timeContext = getTimeContext();
+      // Send message with personality and time context
+      await window.electronAPI.chat.sendMessage(message, traits, timeContext);
       console.log('✅ Message sent successfully');
     } catch (error) {
       console.error('❌ Send message error:', error);
@@ -222,6 +264,13 @@ export class ChatManager {
   }
 
   private onStreamChunk = (chunk: StreamChunk): void => {
+    if (chunk.type === 'expression') {
+      // Handle expression change
+      console.log('🎭 Expression change:', chunk.expression);
+      this.scene.setExpression(chunk.expression || '');
+      return;
+    }
+
     if (chunk.type === 'text') {
       // First text chunk - hide typing and show bubble
       this.panel.hideTyping();
@@ -253,7 +302,7 @@ export class ChatManager {
 
   private showSetupModal(): void {
     const modal = document.createElement('div');
-    modal.className = 'chat-setup-modal';
+    modal.className = 'chat-setup-modal api-key-setup';
 
     modal.innerHTML = `
       <div class="chat-setup-content">
@@ -262,19 +311,134 @@ export class ChatManager {
           请输入智谱 GLM API Key 来启用猫咪自动说话功能。<br>
           <a href="https://open.bigmodel.cn/" target="_blank" class="chat-setup-link">获取 API Key</a>
         </div>
-        <div class="chat-setup-description" style="font-size: 13px; color: #888;">
-          或在项目根目录创建 .env 文件：<br>
-          GLM_API_KEY=你的密钥
+        <div class="api-key-form">
+          <input type="text" id="apiKeyInput" class="chat-setup-input" placeholder="请输入 API Key" autocomplete="off">
+          <button id="apiKeyConfirmBtn" class="chat-setup-button chat-setup-primary">确定</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(modal);
 
-    // Auto close after 5 seconds
-    setTimeout(() => {
+    // Prevent clicks on modal from triggering pet interactions
+    modal.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    modal.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+
+    // Handle input
+    const apiKeyInput = modal.querySelector('#apiKeyInput') as HTMLInputElement;
+    const confirmBtn = modal.querySelector('#apiKeyConfirmBtn') as HTMLButtonElement;
+
+    const saveApiKey = () => {
+      const apiKey = apiKeyInput.value.trim();
+      if (apiKey) {
+        // Save via IPC to main process
+        window.electronAPI.chat.setApiKey(apiKey);
+        console.log('✅ API Key saved');
+        modal.remove();
+        // Show brief success message in chat bubble
+        this.panel.showBubble('API Key 已保存！');
+        setTimeout(() => this.panel.clearBubble(), 2000);
+      }
+    };
+
+    confirmBtn.addEventListener('click', saveApiKey);
+
+    apiKeyInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') saveApiKey();
+    });
+
+    // Auto focus input
+    setTimeout(() => apiKeyInput.focus(), 100);
+  }
+
+  /**
+   * Check if pet name and owner title are set, prompt user if not
+   */
+  private async checkAndSetupPetInfo(): Promise<void> {
+    try {
+      const petInfo = await window.electronAPI.memory.getPetInfo();
+
+      // Check if using default values (first time setup)
+      if (petInfo.petName === '小爪' && petInfo.ownerTitle === '主人') {
+        // Check if this is actually the first time by looking at interaction count
+        const stats = await window.electronAPI.memory.getStats();
+        if (stats && stats.totalInteractions === 0) {
+          this.showPetInfoSetupModal();
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check pet info:', error);
+    }
+  }
+
+  /**
+   * Show modal for setting pet name and owner title
+   */
+  private showPetInfoSetupModal(): void {
+    const modal = document.createElement('div');
+    modal.className = 'chat-setup-modal pet-info-setup';
+
+    modal.innerHTML = `
+      <div class="chat-setup-content pet-info-content">
+        <div class="chat-setup-title">🐱 初次见面！</div>
+        <div class="chat-setup-description">
+          请给宠物取个名字，并告诉我你想让我怎么称呼你～
+        </div>
+        <div class="pet-info-form">
+          <div class="pet-info-input-group">
+            <label>宠物名字</label>
+            <input type="text" id="petNameInput" placeholder="小爪" maxlength="10" value="小爪">
+          </div>
+          <div class="pet-info-input-group">
+            <label>称呼我</label>
+            <input type="text" id="ownerTitleInput" placeholder="主人" maxlength="10" value="主人">
+          </div>
+          <button id="petInfoConfirmBtn" class="pet-info-confirm">确定</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Prevent clicks on modal from triggering pet interactions
+    modal.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    modal.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+
+    // Handle confirm button click
+    const confirmBtn = modal.querySelector('#petInfoConfirmBtn') as HTMLButtonElement;
+    const petNameInput = modal.querySelector('#petNameInput') as HTMLInputElement;
+    const ownerTitleInput = modal.querySelector('#ownerTitleInput') as HTMLInputElement;
+
+    const confirm = () => {
+      const petName = petNameInput.value.trim() || '小爪';
+      const ownerTitle = ownerTitleInput.value.trim() || '主人';
+
+      // Save to memory
+      window.electronAPI.memory.setPetInfo(petName, ownerTitle);
+
+      console.log('✅ Pet info saved:', { petName, ownerTitle });
       modal.remove();
-    }, 5000);
+    };
+
+    confirmBtn.addEventListener('click', confirm);
+
+    // Also confirm on Enter key
+    petNameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') ownerTitleInput.focus();
+    });
+    ownerTitleInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') confirm();
+    });
   }
 
   /**
@@ -386,9 +550,10 @@ export class ChatManager {
     this.panel.showTyping();
 
     try {
-      // Get current personality traits
+      // Get current personality traits and time context
       const traits = this.personalityEngine.getTraits();
-      await window.electronAPI.chat.sendMessage(message, traits);
+      const timeContext = getTimeContext();
+      await window.electronAPI.chat.sendMessage(message, traits, timeContext);
       console.log('✅ Message sent successfully');
     } catch (error) {
       console.error('❌ Send message error:', error);
@@ -402,7 +567,7 @@ export class ChatManager {
     this.unsubscribeStream?.();
     this.unsubscribePersonality?.();
     if (this.autoChatTimer) {
-      clearInterval(this.autoChatTimer);
+      clearTimeout(this.autoChatTimer);
     }
     this.interactionTracker.destroy();
     this.panel.destroy();

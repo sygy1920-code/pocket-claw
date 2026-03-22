@@ -20,6 +20,8 @@ export class Live2DScene {
   private loaded = false;
   private motionGroups: Record<string, any[]> = {};
   private expressions: string[] = [];
+  private idleBehaviorTimer: number | null = null;
+  private currentExpression: string | null = null;
 
   constructor() {}
 
@@ -272,6 +274,45 @@ export class Live2DScene {
     }
   }
 
+  /**
+   * Start idle behaviors - subtle random expression changes
+   */
+  startIdleBehaviors(): void {
+    this.scheduleIdleBehavior();
+  }
+
+  /**
+   * Schedule next idle behavior with random delay
+   */
+  private scheduleIdleBehavior(): void {
+    const delay = 15000 + Math.random() * 15000; // 15-30 seconds
+    this.idleBehaviorTimer = window.setTimeout(() => {
+      this.triggerIdleBehavior();
+      this.scheduleIdleBehavior();
+    }, delay);
+  }
+
+  /**
+   * Trigger a subtle idle behavior
+   */
+  private triggerIdleBehavior(): void {
+    if (!this.loaded || !this.model) return;
+
+    // Subtle expressions for idle behavior
+    const subtleExpressions = ['', 'cat pupil'];
+    const expr = subtleExpressions[Math.floor(Math.random() * subtleExpressions.length)];
+
+    if (expr !== this.currentExpression) {
+      this.currentExpression = expr;
+      if (expr) {
+        this.setExpression(expr);
+      } else {
+        // Reset to default
+        this.model.internalModel.motionManager.expressionManager?.resetExpression();
+      }
+    }
+  }
+
   private onResize = (): void => {
     if (!this.app || !this.container) return;
 
@@ -288,6 +329,10 @@ export class Live2DScene {
 
   destroy(): void {
     window.removeEventListener('resize', this.onResize);
+
+    if (this.idleBehaviorTimer) {
+      clearTimeout(this.idleBehaviorTimer);
+    }
 
     if (this.model) {
       this.model.destroy();

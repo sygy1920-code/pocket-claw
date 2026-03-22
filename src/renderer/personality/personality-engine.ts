@@ -1,5 +1,6 @@
 import type { PersonalityTraits, PersonalityState } from '../../shared/memory-constants';
 import type { InteractionType } from '../../shared/memory-constants';
+import { isQuietHours } from './time-awareness';
 
 /**
  * Renderer-side personality engine for behavior calculation
@@ -35,6 +36,12 @@ export class PersonalityEngine {
    * Determine if pet should initiate auto-chat based on personality
    */
   shouldInitiateChat(): boolean {
+    // Check if it's quiet hours (late night/early morning)
+    if (isQuietHours()) {
+      // Much lower chance during quiet hours
+      return Math.random() < 0.1;
+    }
+
     // Higher curiosity = more likely to initiate
     const curiosityChance = this.traits.curiosity / 100;
 

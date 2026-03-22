@@ -12,7 +12,8 @@ import type {
 export interface ChatAPI {
   getConfig: () => Promise<ChatConfig | null>;
   isConfigured: () => Promise<boolean>;
-  sendMessage: (message: string, personalityTraits?: PersonalityTraits) => Promise<void>;
+  setApiKey: (apiKey: string) => void;
+  sendMessage: (message: string, personalityTraits?: PersonalityTraits, timeContext?: string) => Promise<void>;
   clearHistory: () => void;
   onStreamChunk: (callback: (chunk: StreamChunk) => void) => () => void;
 }
@@ -32,6 +33,8 @@ export interface MemoryAPI {
   resetMemory: () => void;
   getChatInterval: (traits: PersonalityTraits) => Promise<number>;
   getPromptModifier: (traits: PersonalityTraits) => Promise<string>;
+  getPetInfo: () => Promise<{ petName: string; ownerTitle: string }>;
+  setPetInfo: (petName: string, ownerTitle: string) => void;
   onPersonalityUpdate: (callback: (state: PersonalityState) => void) => () => void;
 }
 

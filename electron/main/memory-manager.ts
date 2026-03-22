@@ -78,6 +78,14 @@ export class MemoryManager {
           parsed.lastSummaryDate = null;
         }
 
+        if (!parsed.petName) {
+          parsed.petName = '小爪'; // 默认名字
+        }
+
+        if (!parsed.ownerTitle) {
+          parsed.ownerTitle = '主人'; // 默认称呼
+        }
+
         console.log('Memory loaded successfully');
         return parsed;
       } catch (error) {
@@ -108,6 +116,8 @@ export class MemoryManager {
       ignoredCount: 0,
       lastSeen: Date.now(),
       lastSummaryDate: null,
+      petName: '小爪',
+      ownerTitle: '主人',
     };
   }
 
@@ -353,6 +363,19 @@ export class MemoryManager {
       favoriteExpression,
       recentChats: this.memoryData.recentMessages.length,
     };
+  }
+
+  getPetInfo(): { petName: string; ownerTitle: string } {
+    return {
+      petName: this.memoryData.petName,
+      ownerTitle: this.memoryData.ownerTitle,
+    };
+  }
+
+  setPetInfo(petName: string, ownerTitle: string): void {
+    this.memoryData.petName = petName;
+    this.memoryData.ownerTitle = ownerTitle;
+    this.scheduleSave();
   }
 
   resetMemory(): void {

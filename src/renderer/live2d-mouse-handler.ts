@@ -111,14 +111,14 @@ export class Live2DMouseHandler {
   private handleSingleClick(): void {
     window.electronAPI?.notifyPetClicked();
     this.scene.setState('happy');
-    // Note: Interaction tracking is handled in ChatManager.triggerClickChat()
-    this.chatManager?.triggerClickChat();
+    // Show input dialog on click
+    this.chatManager?.showInput();
   }
 
   private handleDoubleClick(): void {
     this.scene.setState('excited');
-    // Note: Interaction tracking is handled in ChatManager.triggerDoubleClickChat()
-    this.chatManager?.triggerDoubleClickChat();
+    // Show input dialog on double click as well
+    this.chatManager?.showInput();
   }
 
   private onContextMenu = (e: MouseEvent): void => {

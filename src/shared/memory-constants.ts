@@ -66,6 +66,8 @@ export interface MemoryData {
   ignoredCount: number;
   lastSeen: number;
   lastSummaryDate: string | null;  // 上次生成摘要的日期
+  petName: string;            // 宠物名字
+  ownerTitle: string;         // 对主人的称呼
 }
 
 // IPC events
@@ -79,6 +81,8 @@ export const MEMORY_EVENTS = {
   GENERATE_DAILY_SUMMARY: 'summary:generate',
   GET_CHAT_INTERVAL: 'personality:get-chat-interval',
   GET_PROMPT_MODIFIER: 'personality:get-prompt-modifier',
+  GET_PET_INFO: 'memory:get-pet-info',
+  SET_PET_INFO: 'memory:set-pet-info',
 } as const;
 
 // Default personality values

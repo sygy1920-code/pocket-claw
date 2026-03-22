@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { DEFAULT_CONFIG, type ChatConfig } from '../../src/shared/chat-constants';
 
@@ -10,6 +10,7 @@ import { DEFAULT_CONFIG, type ChatConfig } from '../../src/shared/chat-constants
 export class ConfigManager {
   private config: ChatConfig;
   private apiKey: string = '';
+  private apiKeyListeners: Array<(key: string) => void> = [];
 
   constructor() {
     // Load .env from project root or app path
@@ -88,5 +89,64 @@ export class ConfigManager {
 
   updateConfig(partial: Partial<ChatConfig>): void {
     this.config = { ...this.config, ...partial };
+  }
+
+  /**
+   * Update API key and notify listeners
+   */
+  setApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    // Notify all listeners (LLMService)
+    this.apiKeyListeners.forEach(listener => listener(apiKey));
+    // Save to .env file for persistence
+    this.saveApiKeyToEnv(apiKey);
+  }
+
+  /**
+   * Register a listener for API key changes
+   */
+  onApiKeyChange(listener: (key: string) => void): () => void {
+    this.apiKeyListeners.push(listener);
+    // Return unsubscribe function
+    return () => {
+      const index = this.apiKeyListeners.indexOf(listener);
+      if (index > -1) {
+        this.apiKeyListeners.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Save API key to .env file in userData directory
+   */
+  private saveApiKeyToEnv(apiKey: string): void {
+    try {
+      const userDataPath = app.getPath('userData');
+      const envPath = join(userDataPath, '.env');
+
+      // Read existing .env content
+      let content = '';
+      if (existsSync(envPath)) {
+        content = readFileSync(envPath, 'utf-8');
+      }
+
+      // Update or add GLM_API_KEY line
+      const lines = content.split('\n');
+      const updatedLines = lines.filter(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('GLM_API_KEY=')) {
+          return false; // Remove old line
+        }
+        return true;
+      });
+
+      updatedLines.push(`GLM_API_KEY=${apiKey}`);
+
+      // Write back
+      writeFileSync(envPath, updatedLines.join('\n'), 'utf-8');
+      console.log('✅ API Key saved to .env:', envPath);
+    } catch (error) {
+      console.error('Failed to save API key to .env:', error);
+    }
   }
 }
